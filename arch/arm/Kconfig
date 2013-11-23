@@ -29,7 +29,7 @@ config ARM
 	select HAVE_PERF_EVENTS
 	select PERF_USE_VMALLOC
 	select HAVE_REGS_AND_STACK_ACCESS_API
-	#select HAVE_HW_BREAKPOINT if (PERF_EVENTS && (CPU_V6 || CPU_V6K || CPU_V7))
+	select HAVE_HW_BREAKPOINT if (PERF_EVENTS && (CPU_V6 || CPU_V6K || CPU_V7))
 	select HAVE_C_RECORDMCOUNT
 	select HAVE_GENERIC_HARDIRQS
 	select GENERIC_IRQ_SHOW
@@ -213,6 +213,9 @@ config NEED_RET_TO_USER
 config ARCH_MTD_XIP
 	bool
 
+config ARCH_WANT_KMAP_ATOMIC_FLUSH
+	bool
+
 config VECTORS_BASE
 	hex
 	default 0xffff0000 if MMU || CPU_HIGH_VECTOR
@@ -263,6 +266,37 @@ config PHYS_OFFSET
 config GENERIC_BUG
 	def_bool y
 	depends on BUG
+
+config GENERIC_TIME_VSYSCALL
+	bool "Enable gettimeofday updates"
+	depends on CPU_V7
+	help
+	  Enables updating the kernel user helper area with the xtime struct
+	  data for gettimeofday via kernel user helpers.
+
+config ARM_USE_USER_ACCESSIBLE_TIMERS
+	bool "Enables mapping a timer counter page to user space"
+	depends on USE_USER_ACCESSIBLE_TIMERS && GENERIC_TIME_VSYSCALL
+	help
+	 Enables ARM-specific user-accessible timers via a shared
+	 memory page containing the cycle counter.
+
+config ARM_USER_ACCESSIBLE_TIMER_BASE
+	hex "Base address of user-accessible timer counter page"
+	default 0xfffef000
+	depends on ARM_USE_USER_ACCESSIBLE_TIMERS
+	help
+	 Specify the base user-space virtual address where the user-accessible
+	 timer counter page should be mapped by the kernel.  User-space apps
+	 will read directly from the page at this address.
+
+config ARCH_RANDOM
+	bool "SOC specific random number generation"
+	help
+	 Allow the kernel to use an architecture specific implementation for
+	 random number generation
+
+	 If unsure, say N
 
 source "init/Kconfig"
 
@@ -575,7 +609,7 @@ config ARCH_IXP4XX
 	select ARCH_HAS_DMA_SET_COHERENT_MASK
 	select CLKSRC_MMIO
 	select CPU_XSCALE
-	select ARCH_REQUIRE_GPIOLIB
+	select GENERIC_GPIO
 	select GENERIC_CLOCKEVENTS
 	select MIGHT_HAVE_PCI
 	select NEED_MACH_IO_H
@@ -598,7 +632,6 @@ config ARCH_KIRKWOOD
 	bool "Marvell Kirkwood"
 	select CPU_FEROCEON
 	select PCI
-	select PCI_QUIRKS
 	select ARCH_REQUIRE_GPIOLIB
 	select GENERIC_CLOCKEVENTS
 	select NEED_MACH_IO_H
@@ -1454,16 +1487,6 @@ config KSAPI
           Scorpion processor supported hardware performance counters on a per
           thread basis or AXI counters on an overall system basis.
 
-config ARM_ERRATA_775420
-       bool "ARM errata: A data cache maintenance operation which aborts, might lead to deadlock"
-       depends on CPU_V7
-       help
-	 This option enables the workaround for the 775420 Cortex-A9 (r2p2,
-	 r2p6,r2p8,r2p10,r3p0) erratum. In case a date cache maintenance
-	 operation aborts with MMU exception, it might cause the processor
-	 to deadlock. This workaround puts DSB before executing ISB if
-	 an abort may occur on cache maintenance.
-
 endmenu
 
 source "arch/arm/common/Kconfig"
@@ -1828,18 +1851,9 @@ config ARCH_MEMORY_REMOVE
 config ENABLE_DMM
 	def_bool n
 
-config FIX_MOVABLE_ZONE
-	def_bool n
-
 config DONT_MAP_HOLE_AFTER_MEMBANK0
 	def_bool n
 	depends on SPARSEMEM
-
-config ARCH_ENABLE_MEMORY_HOTPLUG
-	def_bool n
-
-config ARCH_ENABLE_MEMORY_HOTREMOVE
-	def_bool n
 
 config HOLES_IN_ZONE
 	def_bool n
@@ -2225,7 +2239,6 @@ source "drivers/cpufreq/Kconfig"
 config CPU_FREQ_IMX
 	tristate "CPUfreq driver for i.MX CPUs"
 	depends on ARCH_MXC && CPU_FREQ
-	select CPU_FREQ_TABLE
 	help
 	  This enables the CPUfreq driver for i.MX CPUs.
 

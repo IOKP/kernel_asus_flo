@@ -20,7 +20,6 @@
 #include <linux/coresight.h>
 #include <asm/clkdev.h>
 #include <mach/kgsl.h>
-#include <linux/android_pmem.h>
 #include <mach/irqs-8960.h>
 #include <mach/dma.h>
 #include <linux/dma-mapping.h>
@@ -52,6 +51,7 @@
 #include <mach/msm_dcvs.h>
 #include <mach/iommu_domains.h>
 #include <mach/socinfo.h>
+#include "pm.h"
 
 #ifdef CONFIG_MSM_MPM
 #include <mach/mpm.h>
@@ -115,11 +115,18 @@ static struct resource msm8960_resources_pccntr[] = {
 	},
 };
 
-struct platform_device msm8960_pc_cntr = {
-	.name		= "pc-cntr",
+static struct msm_pm_init_data_type msm_pm_data = {
+	.retention_calls_tz = true,
+};
+
+struct platform_device msm8960_pm_8x60 = {
+	.name		= "pm-8x60",
 	.id		= -1,
 	.num_resources	= ARRAY_SIZE(msm8960_resources_pccntr),
 	.resource	= msm8960_resources_pccntr,
+	.dev = {
+		.platform_data = &msm_pm_data,
+	},
 };
 
 static struct resource resources_otg[] = {
@@ -1634,6 +1641,19 @@ struct platform_device msm_device_bam_dmux = {
 	.id		= -1,
 };
 
+static struct msm_pm_sleep_status_data msm_pm_slp_sts_data = {
+	.base_addr = MSM_ACC0_BASE + 0x08,
+	.cpu_offset = MSM_ACC1_BASE - MSM_ACC0_BASE,
+	.mask = 1UL << 13,
+};
+struct platform_device msm8960_cpu_slp_status = {
+	.name		= "cpu_slp_status",
+	.id		= -1,
+	.dev = {
+		.platform_data = &msm_pm_slp_sts_data,
+	},
+};
+
 static struct msm_watchdog_pdata msm_watchdog_pdata = {
 	.pet_time = 10000,
 	.bark_time = 11000,
@@ -1846,7 +1866,7 @@ struct platform_device msm8960_device_qup_i2c_gsbi12 = {
 	.resource	= resources_qup_i2c_gsbi12,
 };
 
-#ifdef CONFIG_MSMB_CAMERA
+#if defined(CONFIG_MSMB_CAMERA) || defined(CONFIG_MSM_CAMERA)
 static struct resource msm_cam_gsbi4_i2c_mux_resources[] = {
 	{
 		.name   = "i2c_mux_rw",
@@ -3227,7 +3247,30 @@ struct msm_bus_scale_pdata grp2d1_bus_scale_pdata = {
 };
 #endif
 
-static struct resource kgsl_3d0_resources[] = {
+struct resource kgsl_3d0_resources_8960ab[] = {
+	{
+		.name = KGSL_3D0_REG_MEMORY,
+		.start = 0x04300000, /* GFX3D address */
+		.end = 0x0430ffff,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.name = KGSL_3D0_SHADER_MEMORY,
+		.start = 0x04310000, /* Shader Mem Address (8960AB) */
+		.end = 0x0431ffff,
+		.flags = IORESOURCE_MEM,
+	},
+	{
+		.name = KGSL_3D0_IRQ,
+		.start = GFX3D_IRQ,
+		.end = GFX3D_IRQ,
+		.flags = IORESOURCE_IRQ,
+	},
+};
+
+int kgsl_num_resources_8960ab = ARRAY_SIZE(kgsl_3d0_resources_8960ab);
+
+static struct resource kgsl_3d0_resources_8960[] = {
 	{
 		.name = KGSL_3D0_REG_MEMORY,
 		.start = 0x04300000, /* GFX3D address */
@@ -3298,7 +3341,6 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 	.num_levels = ARRAY_SIZE(grp3d_freq) + 1,
 	.set_grp_async = NULL,
 	.idle_timeout = HZ/12,
-	.nap_allowed = true,
 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE | KGSL_CLK_MEM_IFACE,
 #ifdef CONFIG_MSM_BUS_SCALING
 	.bus_scale_table = &grp3d_bus_scale_pdata,
@@ -3311,8 +3353,8 @@ static struct kgsl_device_platform_data kgsl_3d0_pdata = {
 struct platform_device msm_kgsl_3d0 = {
 	.name = "kgsl-3d0",
 	.id = 0,
-	.num_resources = ARRAY_SIZE(kgsl_3d0_resources),
-	.resource = kgsl_3d0_resources,
+	.num_resources = ARRAY_SIZE(kgsl_3d0_resources_8960),
+	.resource = kgsl_3d0_resources_8960,
 	.dev = {
 		.platform_data = &kgsl_3d0_pdata,
 	},
@@ -3365,7 +3407,6 @@ static struct kgsl_device_platform_data kgsl_2d0_pdata = {
 	.num_levels = ARRAY_SIZE(grp2d_freq) + 1,
 	.set_grp_async = NULL,
 	.idle_timeout = HZ/5,
-	.nap_allowed = true,
 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE,
 #ifdef CONFIG_MSM_BUS_SCALING
 	.bus_scale_table = &grp2d0_bus_scale_pdata,
@@ -3432,7 +3473,6 @@ static struct kgsl_device_platform_data kgsl_2d1_pdata = {
 	.num_levels = ARRAY_SIZE(grp2d_freq) + 1,
 	.set_grp_async = NULL,
 	.idle_timeout = HZ/5,
-	.nap_allowed = true,
 	.clk_map = KGSL_CLK_CORE | KGSL_CLK_IFACE,
 #ifdef CONFIG_MSM_BUS_SCALING
 	.bus_scale_table = &grp2d1_bus_scale_pdata,
